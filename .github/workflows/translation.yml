@@ -1,9 +1,31 @@
 ---
-#######################################
-#######################################
-## Translate Document GitHub Actions ##
-#######################################
-#######################################
+###########################################
+###########################################
+## Translate Document GitHub Actions     ##
+## Expects the folowing secrets:         ## 
+##   AZURE_CLIENT_ID: Client Id of the   ##
+##     azure cli application that is     ##
+##     federated to trust github actions.##
+##      more info: https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure?tabs=azure-portal%2Clinux#use-the-azure-login-action-with-openid-connect
+##   AZURE_SUBSCRIPTION_ID: Subscription ## 
+##     Id of the azure cli application   ##
+##   AZURE_TENANT_ID: Tenant id of the   ##
+##     azure cli application             ##
+##   CREATE_PULL_REQUEST_TOKEN: A GitHub ##
+##     PAT with repo scope to allow the  ##
+##     action to issue PRs. more info:   ##
+##     https://github.com/peter-evans/create-pull-request#action-inputs
+##   STORAGE_ACCOUNT_NAME: Azure Blob    ##
+##     storage account name              ##
+##   TRANSLATOR_API_KEY: Key for Azure   ##
+##     Cognitive Service Translate API   ##
+##   TRANSLATOR_API_URI: URI of Azure    ##
+##     Document Translator API           ##
+## Expects the folowing variables:       ## 
+##   DOCUMENT_PATH: Path to source       ##
+##     document for translation          ##
+###########################################
+###########################################
 name: Translate Document
 
 on:
