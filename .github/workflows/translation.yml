@@ -30,10 +30,7 @@ name: Translate Document
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - ".github/workflows/translation.yml"
-
+  
 permissions:
   id-token: write
   contents: read
