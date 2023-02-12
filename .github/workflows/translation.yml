@@ -86,7 +86,6 @@ jobs:
       - name: "Upload source document with Azure CLI"
         run: |
           set -eux
-          end=`date -u -d "30 minutes" '+%Y-%m-%dT%H:%MZ'`
           az storage blob upload \
             --overwrite true \
             --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }} \
@@ -143,18 +142,23 @@ jobs:
         if: matrix.glossary
         run: |
           set -eux
-          end=`date -u -d "30 minutes" '+%Y-%m-%dT%H:%MZ'`
-          az storage blob upload \
-            --overwrite true \
-            --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }} \
-            --container-name $GLOSSARY_CONTAINER_NAME \
-            --name ${{ matrix.glossary }} \
-            --file translations/${{ matrix.language-id }}/${{ matrix.glossary }} \
-            --auth-mode login
-          glossary_sas=`az storage container generate-sas -n $GLOSSARY_CONTAINER_NAME --auth-mode login --as-user --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }} --https-only --permissions lre --expiry $end -o tsv`
-          glossary_uri_with_sas=https://${{ secrets.STORAGE_ACCOUNT_NAME }}.blob.core.windows.net/$GLOSSARY_CONTAINER_NAME/${{ matrix.glossary }}?$glossary_sas
-          glossary_json=",\"glossaries\": [{\"glossaryUrl\":\"$glossary_uri_with_sas\",\"format\":\"CSV\"}]"
-          echo "glossary_json=$glossary_json" >> $GITHUB_ENV
+          glossary_file=translations/${{ matrix.language-id }}/${{ matrix.glossary }}
+          if [ -f "$glossary_file" ]; then
+            az storage blob upload \
+              --overwrite true \
+              --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }} \
+              --container-name $GLOSSARY_CONTAINER_NAME \
+              --name ${{ matrix.glossary }} \
+              --file  \
+              --auth-mode login
+            end=`date -u -d "30 minutes" '+%Y-%m-%dT%H:%MZ'`
+            glossary_sas=`az storage container generate-sas -n $GLOSSARY_CONTAINER_NAME --auth-mode login --as-user --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }} --https-only --permissions lre --expiry $end -o tsv`
+            glossary_uri_with_sas=https://${{ secrets.STORAGE_ACCOUNT_NAME }}.blob.core.windows.net/$GLOSSARY_CONTAINER_NAME/${{ matrix.glossary }}?$glossary_sas
+            glossary_json="{\"glossaryUrl\":\"$glossary_uri_with_sas\",\"format\":\"CSV\"}"
+            echo "glossary_json=$glossary_json" >> $GITHUB_ENV
+          else
+            echo "glossary_json= " >> $GITHUB_ENV
+          fi
       - name: "No Translation to Upload"
         if: ${{ ! matrix.glossary }}
         run: |
@@ -170,11 +174,17 @@ jobs:
           end=`date -u -d "30 minutes" '+%Y-%m-%dT%H:%MZ'`
           input_sas=`az storage container generate-sas -n $INPUT_CONTAINER_NAME --auth-mode login --as-user --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }} --https-only --permissions lr --expiry $end -o tsv`
           output_sas=`az storage container generate-sas -n $OUTPUT_CONTAINER_NAME --auth-mode login --as-user --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }} --https-only --permissions lw --expiry $end -o tsv`
-
+          body=sed -e 's/STORAGE_ACCOUNT_NAME/${{ secrets.STORAGE_ACCOUNT_NAME }}/g' \
+            -e 's/INPUT_CONTAINER_NAME/$INPUT_CONTAINER_NAME/g' \
+            -e 's/INPUT_SAS/$input_sas/g' \
+            -e 's/OUTPUT_CONTAINER_NAME/$OUTPUT_CONTAINER_NAME/g' \
+            -e 's/OUTPUT_SAS/$output_sas/g' \
+            -e 's/LANGUAGE_ID/${{ matrix.language-id }}/g' \
+            -e 's/GLOSSARIES/$glossary_json/g'
           operation_id=$(az rest --method post \
             --url ${{ secrets.TRANSLATOR_API_URI }}translator/text/batch/v1.0/batches \
             --headers Ocp-Apim-Subscription-Key=${{ secrets.TRANSLATOR_API_KEY }} \
-            --body "{\"inputs\": [{\"source\": { \"sourceUrl\": \"https://${{ secrets.STORAGE_ACCOUNT_NAME }}.blob.core.windows.net/$INPUT_CONTAINER_NAME/?$input_sas\"}, \"targets\": [{\"targetUrl\": \"https://${{ secrets.STORAGE_ACCOUNT_NAME }}.blob.core.windows.net/$OUTPUT_CONTAINER_NAME?$output_sas\",\"language\": \"${{ matrix.language-id }}\" $glossary_json }]}]}" \
+            --body $body \
             --verbose 2> >(grep -i Operation-Location) >/dev/null | grep -oEi '(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}')
           echo opertaion id is $operation_id
           echo "operation_id=$operation_id" >> $GITHUB_ENV
@@ -187,20 +197,12 @@ jobs:
           action_state="${{ env.action_state }}"
           echo $action_state
           status=NotStarted
-          while [ "$status" = "NotStarted" ]
+          while [ "$status" = "NotStarted" or "$status" = "Running" ]
           do
             status=$(az rest --method get \
               --url ${{ secrets.TRANSLATOR_API_URI }}translator/text/batch/v1.0/batches/$operation_id \
               --headers Ocp-Apim-Subscription-Key=${{ secrets.TRANSLATOR_API_KEY }} | jq -r .status)
-            echo waiting for run to start status is $status
-          done
-
-          while [ "$status" = "Running" ]
-          do
-            status=$(az rest --method get \
-              --url ${{ secrets.TRANSLATOR_API_URI }}translator/text/batch/v1.0/batches/$operation_id \
-              --headers Ocp-Apim-Subscription-Key=${{ secrets.TRANSLATOR_API_KEY }} | jq -r .status)
-            echo running status is $status
+            echo waiting for run status is $status
           done
           echo status is $status
           if [ "$status" != "Succeeded" ]
@@ -216,14 +218,12 @@ jobs:
         run: |
           set -eux
           mkdir -p ./translations/${{ matrix.language-id }}
-          end=`date -u -d "30 minutes" '+%Y-%m-%dT%H:%MZ'`
-          sas=`az storage container generate-sas -n $OUTPUT_CONTAINER_NAME --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }} --https-only --permissions lr --expiry $end -o tsv`
           az storage blob download \
           --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }} \
           --container-name $OUTPUT_CONTAINER_NAME \
           --name  ${{ vars.DOCUMENT_PATH }} \
           --file  ./translations/${{ matrix.language-id }}/${{ vars.DOCUMENT_PATH }} \
-          --sas-token $sas
+          --auth-mode login
       #############################
       # Delete output container   #
       #############################
@@ -249,6 +249,7 @@ jobs:
   delete-source:
     name: Delete source document container
     needs: translate-language
+    if: always()
     runs-on: ubuntu-latest
     steps:
       ##########################
