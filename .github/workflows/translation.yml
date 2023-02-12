@@ -33,6 +33,7 @@ on:
   push:
     paths:
       - ".github/workflows/translation.yml"
+      
   
 permissions:
   id-token: write
