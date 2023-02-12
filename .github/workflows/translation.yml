@@ -227,6 +227,7 @@ jobs:
       # Delete output container   #
       #############################
       - name: Delete target container
+        if: always()
         run: |
           set -eux
           az storage container delete \
