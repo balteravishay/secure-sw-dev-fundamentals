@@ -1,4 +1,3 @@
-
 # Secure Software Development Fundamentals
 
 by David A. Wheeler
