@@ -6,6 +6,7 @@
       },
       "targets": [
         {
+          "category": "7ba6e082-0aa0-42bc-99d2-02f06336d7e8-TECH",
           "targetUrl": "https://STORAGE_ACCOUNT_NAME.blob.core.windows.net/OUTPUT_CONTAINER_NAME?OUTPUT_SAS",
           "language": "LANGUAGE_ID",
           "glossaries": [ GLOSSARIES ]
